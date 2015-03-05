@@ -14,11 +14,18 @@ import datetime
 from time import sleep
 from threading import Thread
 from copy import deepcopy
+from collections import deque
+from random import randint
 
 try:
     import pypm
 except ImportError:
     from pygame import pypm
+
+
+class TerminateException(Exception):
+    pass
+
 
 class LaunchPadError(Exception):
     def __init__(self, value):
@@ -67,29 +74,138 @@ class Frame(list):
 
 
 class Animation(object):
-    def __init__(self, launchpad, x=0, y=0, w=9, h=9):
+    def __init__(self, launchpad, x=0, y=0, w=9, h=9, time=None):
         self.l = launchpad
         self.x = x
         self.y = y
         self.w = w
         self.h = h
-    def transition(self, next_frame=None, frame=None, time=0):
+        self.time = time
+
+    def transition(self, next_frame=None, frame=None, time=0, exclude=list()):
         next_frame = next_frame or self.l.next_frame
         frame = frame or self.l.frame
         for y in range(self.y, self.h):
             for x in range(self.x, self.w):
-                if frame[(x,y)] != next_frame[(x, y)]:
+                if frame[(x,y)] != next_frame[(x, y)] and not self.excluded(x,y,exclude):
                     self.l.light((x,y), next_frame[(x,y)])
 
+    def excluded(self, x, y, exclude):
+        for e in exclude:
+            if e.x <= x < e.x+e.w and e.y <= y < e.y+e.h:
+                return True
+        return False
+
+    def frames_equal(self, f1, f2):
+        for x in range(self.x, self.x+self.w):
+            for y in range(self.y, self.y+self.h):
+                if f1[(x,y)] != f2[(x,y)]:
+                    return False
+        return True
+
+
 class FadeAnimation(Animation):
-    def transition(self, next_frame, frame, time=1):
+    def transition(self, next_frame, frame, time=1, exclude=list()):
+        time = self.time or time
         s = datetime.datetime.now()
         frame = deepcopy(frame)
         for i in range(4):
             frame.diff_update(next_frame)
             super(FadeAnimation, self).transition(frame)
             e = datetime.datetime.now()
-            sleep(time/4 - (e-s).microseconds/1000000/4)
+            if time/4 - (e-s).microseconds/1000000/4 > 0:
+                sleep(time/4 - (e-s).microseconds/1000000/4)
+
+
+class DrizzleAnimation(Animation):
+    def __init__(self, *args, **kwargs):
+        self.d = (0, 1)
+        self.c = (0, 3)
+        self.prob = 100000
+        super(DrizzleAnimation, self).__init__(*args, **kwargs)
+
+    def transition(self, next_frame, frame, time=1, exclude=list()):
+        #no need to drizzle, same frame
+        if self.frames_equal(next_frame, frame): 
+            return
+
+        time = self.time or time
+        x = self.x if self.d[0] != -1 else self.x + self.w - 1
+        y = self.y if self.d[1] != -1 else self.y + self.h - 1
+        queue = deque()
+        visited = set()
+        if self.d[0] == 0:
+            queue.extend([(i, y) for i in range(x, x+self.w)])
+        if self.d[1] == 0:
+            queue.extend([(x, i) for i in range(y, y+self.h)])
+        if not (self.d[0] or self.d[1]):
+            queue.append((x, y))
+
+        n = len(queue)
+        s = 0
+        while len(queue):
+            if n == len(queue):
+                s = datetime.datetime.now()
+            n -= 1
+            p = queue.popleft()
+            if p in visited or not self.inside_bounds(p):
+                continue
+            if not randint(0,self.prob): #randomly drizzle
+                queue.append(p)
+            else:
+                visited.add(p)
+                if self.d[0]:
+                    queue.append((p[0] + self.d[0], p[1]))
+                if self.d[1]:
+                    queue.append((p[0], p[1] + self.d[1]))
+
+                self.l.light(p, self.c)
+            
+            if n == 0:
+                n = len(queue)
+                e = datetime.datetime.now()
+                if time - (e-s).microseconds/1000000/4 > 0:
+                    sleep(time - (e-s).microseconds/1000000/4)
+
+        x = self.x if self.d[0] != -1 else self.x + self.w - 1
+        y = self.y if self.d[1] != -1 else self.y + self.h - 1
+        queue = deque()
+        visited = set()
+
+        if self.d[0] == 0:
+            queue.extend([(i, y) for i in range(x, x+self.w)])
+        if self.d[1] == 0:
+            queue.extend([(x, i) for i in range(y, y+self.h)])
+        if not (self.d[0] or self.d[1]):
+            queue.append((x, y))
+
+        n = len(queue)
+        s = 0
+        while len(queue):
+            if n == len(queue):
+                s = datetime.datetime.now()
+            n -= 1
+            p = queue.popleft()
+            if p in visited or not self.inside_bounds(p):
+                continue
+            if not randint(0,self.prob): #randomly drizzle
+                queue.append(p)
+            else:
+                visited.add(p)
+                if self.d[0]:
+                    queue.append((p[0] + self.d[0], p[1]))
+                if self.d[1]:
+                    queue.append((p[0], p[1] + self.d[1]))
+
+                self.l.light(p, next_frame[p])
+            
+            if n == 0:
+                n = len(queue)
+                e = datetime.datetime.now()
+                if time - (e-s).microseconds/1000000/4 > 0:
+                    sleep(time - (e-s).microseconds/1000000/4)
+    def inside_bounds(self, p):
+        return self.x <= p[0] < self.x+self.w and self.y <= p[1] < self.y+self.h
 
 
 class Launchpad:
@@ -100,14 +216,36 @@ class Launchpad:
     def __init__(self, idIn, idOut):
         self._midiIn = pypm.Input(idIn)
         self._midiOut = pypm.Output(idOut, 0)
+
+        self.terminate_threads = False
+
         self.frame = Frame()
         self.next_frame = Frame()
         self.animation = Animation(self)
-        self.animations = dict()
+        self.animations = list()
+
+        self.threads = None
+
+        self.event_handler = lambda x, y, p: False
+
 
     def reset(self):
         self._midiOut.WriteShort(0xb0, 0, 0)
         self._drumrackMode = False
+
+    def reset_state(self):
+        self.frame = Frame()
+        self.next_frame = Frame()
+        self.animation = Animation(self)
+        self.animations = list()
+        self.terminate_threads = True
+        for t in threads():
+            t.join()
+        self.terminate_threads = False
+
+        self.threads = None
+        self.reset()
+
 
     def setDutyCycle(self, numerator, denominator):
         if numerator < 9:
@@ -140,11 +278,34 @@ class Launchpad:
 
     def animate(self, time=1):
         s = datetime.datetime.now()
-        self.animation.transition(self.next_frame, self.frame, time)
+
+        threads = []
+        for a in self.animations:
+            threads.append(Thread(target=a.transition, args=(self.next_frame, self.frame, time)))
+        threads.append(Thread(target=self.animation.transition, args=(self.next_frame, self.frame, time, self.animations)))
+        
+        if not self.threads:
+            self.threads = threads
+        for i, t in enumerate(threads):
+            if not self.threads[i].is_alive():
+                print "wtf"
+                self.threads[i] = t
+                t.start()
+        for t in threads:
+            if t.is_alive():
+                t.join(time)
+        #self.animation.transition(self.next_frame, self.frame, time)
+
+        self.switch_frames()
+
         e = datetime.datetime.now()
         if time - (e-s).microseconds/1000000 > 0:
             sleep(time - (e-s).microseconds/1000000)
-        self.switch_frames()
+        
+        # probably the best place to check if the thread
+        # should be terminated, since #animate gets called often
+        if self.terminate_threads:
+            raise TerminateException
 
     def switch_frames(self):
         self.frame = self.next_frame
@@ -163,11 +324,6 @@ class Launchpad:
             raise LaunchPadError("Bad red value {}".format(col[0]))
         if not 0 <= col[1] <= 3: 
             raise LaunchPadError("Bad green value {}".format(col[1]))
-
-        if self.frame[pos] == col:
-            return
-        else:
-            self.frame[pos] = col
 
         velocity = 16*col[1] + col[0] + 8 + 4
 
@@ -244,14 +400,15 @@ class Launchpad:
                     y=107-note
                 else:
                     x = note % 4
-                    y = (note/4)-9
+                    y = (note//4)-9
                     if y>7:
                         x += 4
                         y -= 8
             else: # Normal mode
                 x = note % 16
-                y = 7 - (note / 16)
+                y = 7 - (note // 16)
 #            print x,y,velocity==127
+            self.event_handler(x,y,velocity==127)
             return x,y,velocity==127
         return None
     
