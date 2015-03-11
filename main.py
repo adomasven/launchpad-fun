@@ -3,6 +3,7 @@
 from __future__ import division
 from threading import Thread
 from datetime import datetime
+import random
 from random import randint
 import launchpad
 from launchpad import TerminateException
@@ -18,7 +19,7 @@ l.setDrumRackMode()
 processes = [
     [7, 8, clock, (l, )],
     [0, 8, conway, (l, )],
-    [1, 8, langtons_ant, (l, True, None, ((0, 1), (1, 0), (1, 1)))]
+    [1, 8, langtons_ant, (l, True, (0, [[random.getrandbits(1) for x in xrange(8)] for y in xrange(8)], (4, 4, 0)), ((0, 3), (3, 0), (1, 1)))] #random board seed
 ]
 
 def set_process(pid):
@@ -33,10 +34,10 @@ def set_process(pid):
 def event_handler(x, y, press):
     if not press:
         return False
-    proc = processes if running_proc == 0 else processes[0]
+    proc = processes if running_proc == 0 else [processes[0]]
     for i, p in enumerate(proc):
         if x == p[0] and y == p[1]:
-            set_process(pid)
+            set_process(i)
     if x == 8 and y == 0:
         global col_cap, othr_cap
         col_cap, othr_cap = othr_cap, col_cap
@@ -50,12 +51,12 @@ def colour_filter(col):
     e = datetime.now()
     d = e-s
 
-    if d.seconds/60 > (1 if running_proc == 0 else 0.3):
+    if d.seconds/60 > (2 if running_proc == 0 else 0.5):
         s = e
         switchover += 1
         if randint(0, switchover):
             switchover = 0
-            pid = randint(0, len(processes)-1)
+            pid = randint(1, len(processes)-1)
             if running_proc == 0:
                 set_process(pid)
             else:
