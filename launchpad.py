@@ -218,15 +218,17 @@ class Launchpad:
         self._midiOut = pypm.Output(idOut, 0)
 
         self.terminate_threads = False
+        self.terminate = False
 
         self.frame = Frame()
         self.next_frame = Frame()
         self.animation = Animation(self)
         self.animations = list()
 
-        self.threads = None
+        self.threads = list()
 
         self.event_handler = lambda x, y, p: False
+        self.colour_filter = lambda c: c
 
 
     def reset(self):
@@ -239,11 +241,12 @@ class Launchpad:
         self.animation = Animation(self)
         self.animations = list()
         self.terminate_threads = True
-        for t in threads():
+        for t in self.threads:
             t.join()
         self.terminate_threads = False
+        self.terminate = False
 
-        self.threads = None
+        self.threads = list()
         self.reset()
 
 
@@ -277,6 +280,8 @@ class Launchpad:
 
 
     def animate(self, time=1):
+        if self.terminate:
+            raise TerminateException('rand')
         s = datetime.datetime.now()
 
         threads = []
@@ -284,17 +289,18 @@ class Launchpad:
             threads.append(Thread(target=a.transition, args=(self.next_frame, self.frame, time)))
         threads.append(Thread(target=self.animation.transition, args=(self.next_frame, self.frame, time, self.animations)))
         
-        if not self.threads:
+        if not len(self.threads):
             self.threads = threads
         for i, t in enumerate(threads):
             if not self.threads[i].is_alive():
-                print "wtf"
                 self.threads[i] = t
                 t.start()
-        for t in threads:
+        #block animate default thread
+        threads[-1].join()
+        #then join in any other animation threads that have terminated too
+        for t in threads[0:-1]:
             if t.is_alive():
-                t.join(time)
-        #self.animation.transition(self.next_frame, self.frame, time)
+                t.join(0)
 
         self.switch_frames()
 
@@ -324,6 +330,8 @@ class Launchpad:
             raise LaunchPadError("Bad red value {}".format(col[0]))
         if not 0 <= col[1] <= 3: 
             raise LaunchPadError("Bad green value {}".format(col[1]))
+
+        col = self.colour_filter(col)
 
         velocity = 16*col[1] + col[0] + 8 + 4
 

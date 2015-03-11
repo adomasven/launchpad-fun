@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 from __future__ import division
 
 __author__ = 'Albert James Wigmore'
@@ -12,7 +13,6 @@ import launchpad
 import time
 from random import randint
 from datetime import datetime
-#import psutil
 
 class Game(object):
 

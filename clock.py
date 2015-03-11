@@ -52,7 +52,6 @@ def clock(l, show_usage=False):
             event = l.poll()
             if event and event[2] == True:
                 x, y, press = event
-                evt_handler(event)
                 if x == 8:
                     yellow = ((yellow[0] - 1)%4, (yellow[1] - 1)%4)
                 elif y > 4 and y < 8:
