@@ -230,21 +230,18 @@ class Launchpad:
         self.event_handler = lambda x, y, p: False
         self.colour_filter = lambda c: c
 
-
-    def reset(self):
-        self._midiOut.WriteShort(0xb0, 0, 0)
-        self._drumrackMode = False
-
     def reset_state(self):
-        self.frame = Frame()
-        self.next_frame = Frame()
-        self.animation = Animation(self)
-        self.animations = list()
         self.terminate_threads = True
         for t in self.threads:
             t.join()
         self.terminate_threads = False
         self.terminate = False
+
+        self._midiOut.WriteShort(0xb0, 0, 0)
+        self.frame = Frame()
+        self.next_frame = Frame()
+        self.animation = Animation(self)
+        self.animations = list()
 
         self.threads = list()
         self.reset()

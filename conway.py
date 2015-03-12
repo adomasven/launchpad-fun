@@ -147,7 +147,6 @@ if __name__=="__main__":
     l = launchpad.Launchpad(*l)
     l.setDrumRackMode()
 
-    l.reset()
 
     time.sleep(0.5)
     conway(l)

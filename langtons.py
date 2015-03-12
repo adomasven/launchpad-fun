@@ -122,8 +122,6 @@ if __name__=="__main__":
     l = launchpad.Launchpad(*l)
     l.setDrumRackMode()
 
-    l.reset()
-
     time.sleep(1)
     try:
         langtons_ant(l, False, input(), [(0, 1), (1, 0), (1, 1)])

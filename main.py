@@ -14,7 +14,6 @@ from conway import conway
 ls = launchpad.findLaunchpads()
 l = ls[0]
 l = launchpad.Launchpad(*l)
-l.setDrumRackMode()
 
 processes = [
     [7, 8, clock, (l, )],
@@ -76,7 +75,6 @@ switchover = 0
 
 if __name__=="__main__":
     l.animate()
-    l.reset()
     l.event_handler = event_handler
     l.colour_filter = colour_filter
 
