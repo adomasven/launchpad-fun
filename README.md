@@ -4,7 +4,7 @@ Launchpad Fun is a project based off the amazing [pyLaunchpad](https://github.co
 
 ## Requirements
 
-The project requires either *pypm* or *pygame* modules for python.
+The launchpad controller requires either *pypm* or *pygame* modules for python.
 
 ## Features
 
