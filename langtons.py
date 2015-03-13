@@ -5,7 +5,6 @@ import launchpad
 import time
 import random
 from datetime import datetime
-import psutil
 
 def resize_board(board, new_pos):
     if new_pos[0] < 0:

@@ -3,9 +3,15 @@
 from __future__ import division
 from datetime import datetime
 import launchpad
-import psutil
+_can_show_usage = True
+try:
+    import psutil
+except ImportError:
+    _can_show_usage = False
 
 def clock(l, show_usage=False):
+    if not _can_show_usage:
+        show_usage = False
     l.animation = launchpad.FadeAnimation(l)
     l.animations.append(launchpad.DrizzleAnimation(l,1,4,3,5,0.1)) #drizzle animate numbers
     l.animations.append(launchpad.DrizzleAnimation(l,5,4,3,5,0.1))
