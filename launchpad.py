@@ -4,9 +4,6 @@
 Requires pyPortMidi from http://alumni.media.mit.edu/~harrison/code.html
 But that version doesn't compile on a modern python without patching. You
 can instead use pyGame's MIDI support which is more up to date.
-
-TODO:
-    LED double-buffering and flashing
 """
 
 from __future__ import division
@@ -244,7 +241,6 @@ class Launchpad:
         self.animations = list()
 
         self.threads = list()
-        self.reset()
 
 
     def setDutyCycle(self, numerator, denominator):
@@ -425,7 +421,6 @@ if __name__=="__main__":
     launchPads = findLaunchpads()
     l = launchpad(*launchPads[0])
 
-    l.reset()
     l.setDrumRackMode()
 
     # Wait half a second before exiting to make sure all data has got out.
