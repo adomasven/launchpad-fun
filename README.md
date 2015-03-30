@@ -76,3 +76,11 @@ To find out more, check the examples.
 
 *main.py* will be kept reasonably functional at all times. It is a program
 that combines all other example programs in the repository to convert the launchpad into an interactive clock.
+
+## Remote Control
+
+The *main.py* file has support for networked devices to share their keyboard and/or joypad(s) over the network. In order to run the local service for this on your computer you will need the *pygame* module for python. In the project folder, you should then run:
+
+```shell
+python -m remote.input
+```

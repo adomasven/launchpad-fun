@@ -6,6 +6,10 @@ from datetime import datetime
 import random
 from random import randint
 import launchpad
+
+from netlink.server import Server
+from remote.specialinputreceiver import SpecialInputReceiver
+
 from launchpad import TerminateException
 from clock import clock
 from langtons import langtons_ant
@@ -14,6 +18,9 @@ from conway import conway
 ls = launchpad.findLaunchpads()
 l = ls[0]
 l = launchpad.Launchpad(*l)
+
+server = Server()
+sir = SpecialInputReceiver(server)
 
 processes = [
     [7, 8, clock, (l, )],
@@ -74,17 +81,24 @@ s = datetime.now()
 switchover = 0
 
 if __name__=="__main__":
-    l.animate()
-    l.event_handler = event_handler
-    l.colour_filter = colour_filter
+    try:
+        l.animate()
+        l.event_handler = event_handler
+        l.colour_filter = colour_filter
 
-    while 1:
-        print next_target
-        cur_thread = Thread(target=next_target, args=args)
+        sir.start()
+        server.start()
 
-        next_target = clock #if shit crashes
-        args = (l, )
+        while 1:
+            print next_target
+            cur_thread = Thread(target=next_target, args=args)
 
-        l.reset_state()
-        cur_thread.start()
-        cur_thread.join()
+            next_target = clock #if shit crashes
+            args = (l, )
+
+            l.reset_state()
+            cur_thread.start()
+            cur_thread.join()
+    finally:
+        sir.stop()
+        server.stop()
