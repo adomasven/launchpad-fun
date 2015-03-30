@@ -191,6 +191,9 @@ class Server(object):
                 if self.out_buffer:
                     sent = self.sock.send(self.out_buffer)
                     self.out_buffer = self.out_buffer[sent:]
+        except socket.error as exc:
+            if exc.errno != errno.ECONNREFUSED:
+                raise
         finally:
             self.connected = False
             self.sock.close()
