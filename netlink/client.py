@@ -140,6 +140,7 @@ class Server(object):
         if self.thread:
             self.thread.join()
         self.connected = True
+        self.out_buffer = ""
         self.thread = threading.Thread(None, Server._connection_thread, "Server connection", [self])
         self.thread.start()
 
