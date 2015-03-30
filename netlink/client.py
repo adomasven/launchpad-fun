@@ -24,6 +24,8 @@ class Client(object):
         self.server_update_time = datetime.now()
         self.server_udp_port = 23456
         self.main_thread = None
+        # Receive Queue
+        self.recv_queues = {}
 
     def start(self):
         if self.going:
@@ -46,6 +48,26 @@ class Client(object):
     def last_update(self):
         return self.server_update_time
 
+    def stream_generator(self, stream_id=1):
+        if stream_id < 1 or stream_id > 255:
+            raise ValueError("Stream id is invalid")
+        if stream_id in self.recv_queues:
+            raise ValueError("A generator for this stream is already open")
+        self.recv_queues[stream_id] = collections.deque()
+        return self._stream_generator(stream_id)
+
+    def _stream_generator(self, stream_id):
+        my_queue = self.recv_queues[stream_id]
+        while True:
+            value = None
+            try:
+                value = my_queue.popleft()
+            except IndexError:
+                pass
+            if (yield value) is not None:
+                break
+        del self.recv_queues[stream_id]
+
     def _main_client_thread(self):
         try:
             my_last_broadcast = datetime.now() - timedelta(minutes=30)
@@ -61,7 +83,7 @@ class Client(object):
                                 break
                         else:
                             self.server_update_time = datetime.now()
-                            server = Server(server_data[0], other[0], server_data[2], server_data[1])
+                            server = Server(self, server_data[0], other[0], server_data[2], server_data[1])
                             for address in server_data[1]:
                                 self.server_list[address] = server
                             self.server_list[other[0]] = server
@@ -91,7 +113,8 @@ class Client(object):
             self.going = False
 
 class Server(object):
-    def __init__(self, name, address, ports, addresses):
+    def __init__(self, client, name, address, ports, addresses):
+        self.client = client
         self.name = name
         self.address = address
         self.ports = ports
@@ -101,7 +124,6 @@ class Server(object):
         self.sock = None
         self.thread = None
         # Queues
-        self.recv_queues = {}
         self.out_buffer = ""
 
     def seen(self):
@@ -129,27 +151,6 @@ class Server(object):
             return
         self.connected = False
         self.thread.join()
-
-
-    def stream_generator(self, stream_id=1):
-        if stream_id < 1 or stream_id > 255:
-            raise ValueError("Stream id is invalid")
-        if stream_id in self.recv_queues:
-            raise ValueError("A generator for this stream is already open")
-        self.recv_queues[stream_id] = collections.deque()
-        return self._stream_generator(stream_id)
-
-    def _stream_generator(self, stream_id):
-        my_queue = self.recv_queues[stream_id]
-        while True:
-            value = None
-            try:
-                value = my_queue.popleft()
-            except IndexError:
-                pass
-            if (yield value) is not None:
-                break
-        del self.recv_queues[stream_id]
 
     def send_to_stream(self, message, stream_id=1):
         if stream_id < 1 or stream_id > 255:
@@ -184,8 +185,8 @@ class Server(object):
                 while chr(0) in in_buffer:
                     message, in_buffer = in_buffer.split(chr(0), 1)
                     mess_id = ord(message[0])
-                    if mess_id in self.recv_queues:
-                        self.recv_queues[mess_id].append((self, message[1:]))
+                    if mess_id in self.client.recv_queues:
+                        self.client.recv_queues[mess_id].append((self, message[1:]))
                 if self.out_buffer:
                     sent = self.sock.send(self.out_buffer)
                     self.out_buffer = self.out_buffer[sent:]
@@ -200,7 +201,7 @@ if __name__ == '__main__':
     try:
         client.start()
         loop_count = 0
-        iterators = []
+        iterators = [client.stream_generator(stream_id=sid) for sid in xrange(1, 11)]
         while True:
             time.sleep(.1)
             if update < client.last_update():
@@ -208,8 +209,6 @@ if __name__ == '__main__':
                 print([(x.name, x.last_seen) for x in client.servers])
                 for x in client.servers:
                     x.connect()
-                    for sid in xrange(1, 11):
-                        iterators.append(x.stream_generator(stream_id=sid))
             loop_count += 1
             if not loop_count % 10:
                 for server in client.servers:
