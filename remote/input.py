@@ -49,15 +49,17 @@ if __name__ == "__main__":
                     continue
                 if "keyboard" in data:
                     if data["keyboard"]:
-                        print(x[0].name + " has requested keyboard access")
-                        keyboard_receivers.add(x[0])
+                        if x[0] not in keyboard_receivers:
+                            print(x[0].name + " has requested keyboard access")
+                            keyboard_receivers.add(x[0])
                     elif x[0] in keyboard_receivers:
                         print(x[0].name + " has stopped keyboard access")
                         keyboard_receivers.remove(x[0])
                 if "joypad" in data:
                     if data["joypad"]:
-                        print(x[0].name + " has requested joypad access")
-                        joypad_receivers.add(x[0])
+                        if x[0] not in joypad_receivers:
+                            print(x[0].name + " has requested joypad access")
+                            joypad_receivers.add(x[0])
                     elif x[0] in joypad_receivers:
                         print(x[0].name + " has stopped joypad access")
                         joypad_receivers.remove(x[0])
@@ -93,7 +95,6 @@ if __name__ == "__main__":
                         "scancode": my_event.scancode,
                         "modifiers": my_event.mod,
                     })
-                    print(my_json)
                     for server in keyboard_receivers:
                         if server.is_connected():
                             server.send_to_stream(my_json, stream_id=2)
