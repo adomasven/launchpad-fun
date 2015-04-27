@@ -11,9 +11,11 @@ from netlink.server import Server
 from remote.specialinputreceiver import SpecialInputReceiver
 
 from launchpad import TerminateException
+
 from clock import clock
 from langtons import langtons_ant
 from conway import conway
+from snake import snake
 
 ls = launchpad.findLaunchpads()
 l = ls[0]
@@ -22,7 +24,8 @@ l = launchpad.Launchpad(*l)
 processes = [
     [7, 8, clock, (l, )],
     [0, 8, conway, (l, )],
-    [1, 8, langtons_ant, (l, True, (0, [[random.getrandbits(1) for x in xrange(8)] for y in xrange(8)], (4, 4, 0)), ((0, 3), (3, 0), (1, 1)))] #random board seed
+    [1, 8, langtons_ant, (l, True, (0, [[random.getrandbits(1) for x in xrange(8)] for y in xrange(8)], (4, 4, 0)), ((0, 3), (3, 0), (1, 1)))], #random board seed
+    [2, 8, snake, (l, 16, 16, 0.3)],
 ]
 
 def set_process(pid):
