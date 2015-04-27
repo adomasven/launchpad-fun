@@ -19,9 +19,6 @@ ls = launchpad.findLaunchpads()
 l = ls[0]
 l = launchpad.Launchpad(*l)
 
-server = Server()
-sir = SpecialInputReceiver(server)
-
 processes = [
     [7, 8, clock, (l, )],
     [0, 8, conway, (l, )],
@@ -81,24 +78,22 @@ s = datetime.now()
 switchover = 0
 
 if __name__=="__main__":
-    try:
-        l.animate()
-        l.event_handler = event_handler
-        l.colour_filter = colour_filter
+    with Server() as server:
+        with SpecialInputReceiver(server) as sir:
+            l.animate()
+            l.event_handler = event_handler
+            l.colour_filter = colour_filter
 
-        sir.start()
-        server.start()
+            sir.start()
+            server.start()
 
-        while 1:
-            print next_target
-            cur_thread = Thread(target=next_target, args=args)
+            while 1:
+                print next_target
+                cur_thread = Thread(target=next_target, args=args)
 
-            next_target = clock #if shit crashes
-            args = (l, )
+                next_target = clock #if shit crashes
+                args = (l, )
 
-            l.reset_state()
-            cur_thread.start()
-            cur_thread.join()
-    finally:
-        sir.stop()
-        server.stop()
+                l.reset_state()
+                cur_thread.start()
+                cur_thread.join()

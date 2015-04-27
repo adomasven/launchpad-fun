@@ -49,14 +49,20 @@ class SpecialInputReceiver(object):
         if self.thread is not None:
             self.thread.join()
         self.running = True
-        channel = self.server.stream_generator(stream_id=2)
-        self.thread = threading.Thread(None, SpecialInputReceiver._thread, "", (self, channel))
+        self.thread = threading.Thread(None, SpecialInputReceiver._thread, "", (self, 2))
         self.thread.start()
+
+    def __enter__(self):
+        self.start()
+        return self
 
     def stop(self):
         self.running = False
         if self.thread is not None:
             self.thread.join()
+
+    def __exit__(self, type, val, tb):
+        self.stop()
 
     def set_keyboard(self, need=True):
         self.need_keyboard = need
@@ -64,9 +70,9 @@ class SpecialInputReceiver(object):
     def set_joypad(self, need=True):
         self.need_joypad = need
 
-    def _thread(self, channel):
+    def _thread(self, stream_id):
         last_broadcast = datetime.now() - timedelta(hours=30)
-        try:
+        with self.server.stream_generator(stream_id=stream_id) as channel:
             while self.running:
                 for x in channel:
                     if x is None:
@@ -84,14 +90,6 @@ class SpecialInputReceiver(object):
                     }), stream_id=2)
                     last_broadcast = datetime.now()
                 time.sleep(0.1)
-        finally:
-            self.running = False
-            try:
-                channel.send(0)
-            except TypeError:
-                pass
-            except StopIteration:
-                pass
 
     def _receive(self, client_number, value):
         # TODO: none global inputs
@@ -118,16 +116,10 @@ if __name__ == "__main__":
         print("Could not import the netlink client. Did you mean to run from the root directory?")
         print("You should run with: python -m remote.specialinputreceiver")
         raise
-    server = Server()
-    inpt = SpecialInputReceiver(server)
-    inpt.start()
-    inpt.set_keyboard()
-    inpt.set_joypad()
-    try:
-        server.start()
-        while True:
-            print(inpt.keyboard, inpt.joypad_axis, inpt.joypad_button, inpt.joypad_hat)
-            time.sleep(0.5)
-    finally:
-        inpt.stop()
-        server.stop()
+    with Server() as server:
+        with SpecialInputReceiver(server) as inpt:
+            inpt.set_keyboard()
+            inpt.set_joypad()
+            while True:
+                print(inpt.keyboard, inpt.joypad_axis, inpt.joypad_button, inpt.joypad_hat)
+                time.sleep(0.5)
