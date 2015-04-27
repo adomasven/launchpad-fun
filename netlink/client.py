@@ -36,6 +36,10 @@ class Client(object):
         self.my_thread = threading.Thread(None, Client._main_client_thread, "Main client thread", [self])
         self.my_thread.start()
 
+    def __enter__(self):
+        self.start()
+        return self
+
     def stop(self, close_servers=True):
         if not self.going:
             return
@@ -44,6 +48,9 @@ class Client(object):
         if close_servers:
             for x in self.servers:
                 x.disconnect()
+
+    def __exit__(self, type, val, tb):
+        self.stop()
 
     def last_update(self):
         return self.server_update_time
@@ -54,18 +61,9 @@ class Client(object):
         if stream_id in self.recv_queues:
             raise ValueError("A generator for this stream is already open")
         self.recv_queues[stream_id] = collections.deque()
-        return self._stream_generator(stream_id)
+        return common.StreamGenerator(self.recv_queues[stream_id], (Client._close_stream, (self, stream_id)))
 
-    def _stream_generator(self, stream_id):
-        my_queue = self.recv_queues[stream_id]
-        while True:
-            value = None
-            try:
-                value = my_queue.popleft()
-            except IndexError:
-                pass
-            if (yield value) is not None:
-                break
+    def _close_stream(self, stream_id):
         del self.recv_queues[stream_id]
 
     def _main_client_thread(self):
@@ -200,31 +198,27 @@ class Server(object):
 
 
 if __name__ == '__main__':
-    client = Client()
-    update = client.last_update()
-    try:
-        client.start()
+    with Client() as client:
+        update = client.last_update()
         loop_count = 0
-        iterators = [client.stream_generator(stream_id=sid) for sid in xrange(1, 11)]
-        while True:
-            time.sleep(.1)
-            if update < client.last_update():
-                update = client.last_update()
-                print([(x.name, x.last_seen) for x in client.servers])
-                for x in client.servers:
-                    x.connect()
-            loop_count += 1
-            if not loop_count % 10:
-                for server in client.servers:
-                    if server.is_connected():
-                        for x in xrange(1, 11):
-                            server.send_to_stream("Testing Channel " + str(x), stream_id=x)
-                    else:
-                        server.connect()
-            for iterate in iterators:
+        sid = 1
+        with client.stream_generator(stream_id=sid) as iterate:
+            while True:
+                time.sleep(.1)
+                if update < client.last_update():
+                    update = client.last_update()
+                    print([(x.name, x.last_seen) for x in client.servers])
+                    for x in client.servers:
+                        x.connect()
+                loop_count += 1
+                if not loop_count % 10:
+                    for server in client.servers:
+                        if server.is_connected():
+                            for x in xrange(1, 11):
+                                server.send_to_stream("Testing Channel " + str(x), stream_id=x)
+                        else:
+                            server.connect()
                 for x in iterate:
                     if x is None:
                         break
                     print(x)
-    finally:
-        client.stop()

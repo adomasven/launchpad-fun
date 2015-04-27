@@ -45,11 +45,18 @@ class Server(object):
         self.main_thread = threading.Thread(None, Server._main_server_thread, "Main server thread", [self])
         self.main_thread.start()
 
+    def __enter__(self):
+        self.start()
+        return self
+
     def stop(self):
         if not self.going:
             return
         self.going = False
         self.main_thread.join()
+
+    def __exit__(self, type, value, tb):
+        self.stop()
 
     def stream_generator(self, stream_id=1):
         if stream_id < 1 or stream_id > 255:
@@ -57,18 +64,9 @@ class Server(object):
         if stream_id in self.recv_queues:
             raise ValueError("A generator for this stream is already open")
         self.recv_queues[stream_id] = collections.deque()
-        return self._stream_generator(stream_id)
+        return common.StreamGenerator(self.recv_queues[stream_id], (Server._close_stream, (self, stream_id)))
 
-    def _stream_generator(self, stream_id):
-        my_queue = self.recv_queues[stream_id]
-        while True:
-            value = None
-            try:
-                value = my_queue.popleft()
-            except IndexError:
-                pass
-            if (yield value) is not None:
-                break
+    def _close_stream(self, stream_id):
         del self.recv_queues[stream_id]
 
     def send_to_stream(self, message, stream_id=1, client_id=None):
@@ -155,23 +153,12 @@ class Server(object):
         client.close()
 
 if __name__ == "__main__":
-    my_server = Server()
-    sid = 10 # Stream ID to echo on
-    it = None
-    try:
-        my_server.start()
-        it = my_server.stream_generator(stream_id=sid)
-        for x in it:
-            if x is None:
-                time.sleep(0.5)
-            else:
-                print(x)
-                my_server.send_to_stream(x[1], stream_id=sid, client_id=x[0])
-    finally:
-        if it is not None:
-            # This is the correct way to stop a queue.
-            try:
-                it.send(0)
-            except StopIteration:
-                pass
-        my_server.stop()
+    sid = 1
+    with Server() as my_server:
+        with my_server.stream_generator(stream_id=sid) as it:
+            for x in it:
+                if x is None:
+                    time.sleep(0.5)
+                else:
+                    print(x)
+                    my_server.send_to_stream(x[1], stream_id=sid, client_id=x[0])
