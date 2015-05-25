@@ -21,7 +21,7 @@ processes = [
     [7, 8, clock, (l, )],
     [0, 8, conway, (l, )],
     [1, 8, langtons_ant, (l, True, (0, [[random.getrandbits(1) for x in xrange(8)] for y in xrange(8)], (4, 4, 0)), ((0, 3), (3, 0), (1, 1)))], #random board seed
-    [2, 8, snake, (l, 16, 16, 0.3)],
+    [2, 8, snake, (l, 24, 24, 0.25, True, 3)],
 ]
 
 def set_process(pid):

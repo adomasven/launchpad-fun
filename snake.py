@@ -5,13 +5,14 @@ from datetime import datetime
 from time import sleep
 from collections import deque
 from numpy import ndarray, array
-from random import randint
+from random import randint, choice
 import launchpad
 
 NONE = (0, 0)
 WALL = (3, 3)
 WALL_ = (3, 2)
 TAIL = (0, 3)
+TAIL_ = (0, 2)
 HEAD = (3, 0)
 ITEM = (3, 0)
 ITEM_HINT = (1, 0)
@@ -41,7 +42,7 @@ RIGHT = Vector(0, 1)
 
 
 class World(ndarray):
-    def __new__(cls, w=16, h=16):
+    def __new__(cls, w=16, h=16, num_items=1):
         obj = array([[NONE] * w for _ in range(h)], dtype=Vector).view(type=World)
         obj.w = w
         obj.h = h
@@ -52,14 +53,19 @@ class World(ndarray):
             self.w = getattr(obj, 'w', None)
             self.h = getattr(obj, 'h', None)
 
-    def __init__(self, w=16, h=16):
-        self.gen_item()
+    def __init__(self, w=16, h=16, num_items=1):
+        self.items = set()
+        for i in range(num_items):
+            self.gen_item()
 
-    def gen_item(self):
+    def gen_item(self, rem_item=None):
+        if rem_item:
+            self.items.remove(rem_item)
         while(1):
-            self.item = Vector(randint(1, self.w-2), randint(1, self.h-2))
-            if tuple(self[self.item]) == NONE:
-                self[self.item] = ITEM
+            item = Vector(randint(1, self.w-2), randint(1, self.h-2))
+            if tuple(self[item]) == NONE:
+                self[item] = ITEM
+                self.items.add(item)
                 break
 
 
@@ -70,6 +76,7 @@ class Snake(object):
         self._d = direction
         self.length = 2
         self.tail = deque()
+        self.neck = TAIL
 
     @property
     def d(self):
@@ -87,13 +94,14 @@ class Snake(object):
 
         self.pos += self.d
         curCell = tuple(world[self.pos])
-        if curCell == WALL or curCell == WALL_ or curCell == TAIL:
+        if curCell != NONE and curCell != ITEM:
             return False
         if curCell == ITEM:
             self.length += 1
-            world.gen_item()
+            world.gen_item(self.pos)
         world[self.pos] = HEAD
-        world[self.tail[-1]] = TAIL
+        world[self.tail[-1]] = self.neck
+        self.neck = TAIL if self.neck == TAIL_ else TAIL_
         return True
 
 
@@ -112,18 +120,19 @@ def get_viewport(snake, viewport, w, h):
 
 
 def add_hints(v, view, world):
-    y = world.item[0] - v[0]
-    x = world.item[1] - v[1]
-    if x > 7:
-        x = 7
-    if x < 0:
-        x = 0
-    if y > 7:
-        y = 7
-    if y < 0:
-        y = 0
-    if tuple(view[y][x]) == NONE:
-        view[y][x] = ITEM_HINT
+    for item in world.items:
+        y = item[0] - v[0]
+        x = item[1] - v[1]
+        if x > 7:
+            x = 7
+        if x < 0:
+            x = 0
+        if y > 7:
+            y = 7
+        if y < 0:
+            y = 0
+        if tuple(view[y][x]) == NONE:
+            view[y][x] = ITEM_HINT
 
 def add_score(l, view, snake):
     for i in xrange(8):
@@ -131,16 +140,46 @@ def add_score(l, view, snake):
         colour = (1,2) if bit else (0,0)
         l.update(colour, 8, 8-i)
 
-death = [[1, 0, 0, 0, 0, 0, 0, 1], [0, 1, 0, 0, 0, 0, 1, 0],
-         [0, 0, 1, 0, 0, 1, 0, 0], [0, 0, 0, 1, 1, 0, 0, 0], 
-         [0, 0, 0, 1, 1, 0, 0, 0], [0, 0, 1, 0, 0, 1, 0, 0], 
-         [0, 1, 0, 0, 0, 0, 1, 0], [1, 0, 0, 0, 0, 0, 0, 1]]
+death = [
+            [1, 0, 0, 0, 0, 0, 0, 1], 
+            [0, 1, 0, 0, 0, 0, 1, 0],
+            [0, 0, 1, 0, 0, 1, 0, 0], 
+            [0, 0, 0, 1, 1, 0, 0, 0], 
+            [0, 0, 0, 1, 1, 0, 0, 0], 
+            [0, 0, 1, 0, 0, 1, 0, 0], 
+            [0, 1, 0, 0, 0, 0, 1, 0], 
+            [1, 0, 0, 0, 0, 0, 0, 1]
+        ]
 
 
-def snake(l, w=16, h=16, speed=0.5, ai=True):
+def bfs_move(snake, world):
+    paths = {snake.pos: (0, [])}
+    queue = deque([snake.pos])
+    while len(queue):
+        pos = queue.popleft()
+        dist, path = paths.get(pos)
+        for n in pos.neighbours:
+            if tuple(world[n]) != NONE and tuple(world[n]) != ITEM:
+                continue
+            old_dist, old_path = paths.setdefault(n, 
+                    (len(world)*len(world[0]), []))
+            if dist+1 < old_dist:
+                paths[n] = (dist+1, path + [n])
+                if n in world.items:
+                    return paths[n][1][0] - snake.pos
+                queue.append(n)
+    del paths[snake.pos]
+    try:
+        return choice(paths.values())[1][0] - snake.pos
+    except IndexError: #empty paths
+        return snake.d
+
+
+
+def snake(l, w=16, h=16, speed=0.5, ai=True, num_items=1):
     while(1):
         l.reset_state()
-        world = World(w, h)
+        world = World(w, h, num_items)
         world[0] = [WALL, WALL_] * (w//2)
         world[-1] = [WALL, WALL_] * (w//2)
         world[:,0] = [WALL, WALL_] * (h//2)
@@ -162,14 +201,7 @@ def snake(l, w=16, h=16, speed=0.5, ai=True):
             while(1):
                 e = l.poll()
                 if ai:
-                    if snake.pos[0] < world.item[0]:
-                        snake.d = UP
-                    if snake.pos[0] > world.item[0]:
-                        snake.d = DOWN
-                    if snake.pos[1] < world.item[1]:
-                        snake.d = RIGHT
-                    if snake.pos[1] > world.item[1]:
-                        snake.d = LEFT
+                   snake.d = bfs_move(snake, world)
                 elif e and e[2]:
                     if e[0] == 0 and e[1] == 8:
                         snake.d = LEFT
@@ -200,6 +232,7 @@ def snake(l, w=16, h=16, speed=0.5, ai=True):
 
             e = datetime.now()
             sp = speed / (snake.length/16 + 1)
+            sp = sp if sp > 0.05 else 0.05 # don't go tooo fast
             if sp - (e-s).microseconds / 10**6 > 0:
                 sleep(sp - (e-s).microseconds / 10**6)
 
@@ -217,5 +250,5 @@ if __name__=="__main__":
     l = launchpad.Launchpad(*l)
 
     sleep(0.5)
-    snake(l, speed=0.3, ai=False)
+    snake(l, w=32, h=32, speed=0.1, ai=True, num_items=3)
         
